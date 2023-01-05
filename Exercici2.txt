@@ -1,0 +1,77 @@
+//1. From the registers of 1866 of Castellví de Rosanes (CR), show the number of population and the list of names. Delete the duplicates and NANs.
+MATCH (i:Individual)-[:VIU]->(h:Habitatge)
+WHERE (i.name <> 'nan' and h.municipi='CR')
+RETURN count(i.name) AS `Num Habitants`, collect(distinct i.name) AS  `Llistat`;
+
+//2. From the registers of Sant Feliu de Llobregat (SFLL) before the year 1840, show the population, year of registration and list of ids of each household.
+// Order the results by year of register.
+MATCH (i:Individual)-[:VIU]->(h:Habitatge)
+WHERE (h.municipi = 'SFLL' and h.any_padro < 1840)
+RETURN DISTINCT h.municipi AS `Població`,h.any_padro AS `Any`, collect(distinct(h.id_llar)) AS `Llista Llars`
+ORDER BY h.any_padro;
+
+//3. Show the name of the people that lived in the same household as 'rafel marti' according to the registers of 1838 of Sant Feliu de Llobregat (SFLL). Show the 
+// Show the information in a list and a graph.
+
+// Graph
+MATCH (i1:Individual {name:"rafel", surname:"marti"})-[:VIU]->(h:Habitatge)<-[:VIU]-(i2:Individual)
+WHERE h.any_padro = 1838 AND h.municipi = "SFLL"
+RETURN i1, i2;
+
+// List
+MATCH (i1:Individual {name:"rafel", surname:"marti"})-[:VIU]->(h:Habitatge)<-[:VIU]-(i2:Individual)
+WHERE h.any_padro = 1838 AND h.municipi = "SFLL"
+RETURN i1.name as `Nom`, collect(DISTINCT i2.name)AS `Convivents`;
+
+//4. Return all the appearances of 'Miguel ballester'. Use SAME_AS to find all the instances, no matter if there are spelling mistakes in the name or surname.
+// Show the information in a subgraph.
+
+MATCH path=((i1:Individual)-[:SAME_AS]-(i2:Individual))
+where i1.name='miguel' and i1.surname='ballester'
+return path;
+
+//5. Show all the people related to 'antonio farran'. Show the information in a table: name, first surname, second surname, and type of relationship.
+
+MATCH (i1:Individual)-[rel]-(i2:Individual)
+WHERE toLower(i1.name) = 'antonio' and toLower(i1.surname) = 'farran'
+RETURN i2.name AS `nom`, i2.surname AS `cognom1`, i2.second_surname AS `cognom2`, type(rel) AS `relació`
+ORDER BY i2.name;
+
+//6. List all the familiar relationships that exist. 
+
+MATCH (a:Individual)-[rel]->(b:Individual) 
+WHERE rel.relacio <> "null" 
+RETURN DISTINCT rel.relacio AS relacio;
+
+//7. Identify the nodes that represent the same household (street name and number) along the years in Sant Feliu del Llobregat (SFLL). For the households that have both
+// the information of the street and number, show the street, number, total of households, a list of the years where each household was registered and a list of the 
+// households' ids . Order it by the total of households and show the first 10.
+
+MATCH (a:Habitatge) 
+WHERE a.municipi = "SFLL" AND a.carrer <> "null" AND a.numero <> "null" 
+RETURN a.carrer AS carrer, a.numero AS numero, size(collect(a)) AS total, collect(a.any_padro) AS anys, collect(a.id_llar) AS IDs ORDER BY total DESC LIMIT 10;
+
+//8. Show the families in Castellví de Rosanes with more than 3 children. Show the name and surneames of the father and the number of children. Order by number of children
+// in a descending order, and show a maximum of 20.
+
+MATCH (a:Habitatge)<-[:VIU]-(b:Individual)<-[rel:FAMILIA]-(c:Individual) 
+WHERE a.municipi = "CR" AND rel.relacio <> "familiar" AND rel.relacio =~ "f.*" 
+WITH c, size(collect(b.id)) AS num 
+WHERE num > 3 
+RETURN c.name AS name, c.surname AS surname, c.second_surname AS second_surname, num ORDER BY num DESC LIMIT 20;
+
+//9. Average of children in Sant Feliu del Llobregat in 1881 for every family.Show total of children, number of households and the mean.
+
+MATCH (a:Individual)-[rel:FAMILIA]->(b:Individual)-[:VIU]->(c:Habitatge)<-[:VIU]-(a)
+WHERE c.any_padro = 1881 AND c.municipi = 'SFLL' AND rel.relacio <> "familiar" AND rel.relacio =~ "f.*" 
+RETURN count(distinct a) as total_fills, count(distinct c) as num_llars, round(count(distinct a)/toFloat(count(distinct c)), 2) as mitjana;
+
+//10. For every year in the database, which is the street with less population in Sant Feliu De Llobregat? 
+
+MATCH (a:Individual)-[:VIU]->(b:Habitatge) 
+WHERE b.municipi = "SFLL" 
+WITH b.any_padro as any, b.carrer as carrer, count(a) as total 
+ORDER BY total 
+WITH any, collect(carrer)[0] as min_carrer 
+RETURN any, min_carrer 
+ORDER BY any;

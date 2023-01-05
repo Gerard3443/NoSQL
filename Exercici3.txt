@@ -1,0 +1,63 @@
+//A) 
+CALL gds.graph.project('Ex3_1', ['Individual', 'Habitatge'], 'VIU');
+
+// Distribution of sizes for conex components
+CALL gds.wcc.stream('Ex3_1')
+YIELD componentId, nodeId
+WITH gds.util.asNode(nodeId) AS n1, componentId AS c
+WITH size(collect(n1)) AS Components, c
+RETURN Components, size(collect(Components)) AS `freq`
+ORDER BY Components DESC;
+
+// Distribuition between conex components by city and year
+CALL gds.wcc.stream('Ex3_1')
+YIELD componentId, nodeId as ind
+WITH gds.util.asNode(ind) AS n1, componentId
+WITH collect(n1) AS AllNodes, componentId, n1
+WHERE n1.municipi <> 'null'
+RETURN DISTINCT n1.any_padro AS `Any_padro`, n1.municipi AS `Municipi`, max(componentId) AS `Components Connexes`;
+
+// Nodes without connection to any household
+CALL gds.wcc.stream('Ex3_1')
+YIELD componentId, nodeId
+WITH componentId AS c, collect(nodeId) as n1,
+size(collect(nodeId)) as components
+WHERE components = 1
+MATCH (n)
+WHERE id(n) in n1
+RETURN count(n) AS Nodes, collect(n.name+" "+n.surname) AS Persones;
+
+
+//B)
+
+// Creation of connection MATEIX_HAB (same household)
+MATCH (h:Habitatge),(h2:Habitatge)
+WHERE h.id_llar <> h2.id_llar 
+    AND h.numero=h2.numero 
+    AND h.municipi=h2.municipi 
+    AND h.carrer=h2.carrer
+    AND h2.any_padro < h.any_padro
+MERGE (h)-[:MATEIX_HAB]->(h2)
+
+// Projection of the graph with the relations between individual and household
+CALL gds.graph.project('Ex3_2',['Individual', 'Habitatge'], ['VIU', 'FAMILIA', 'MATEIX_HAB'])
+
+// Similarity
+
+CALL gds.nodeSimilarity.write('Ex3_2',{
+  writeRelationshipType:'SIMILAR',
+  writeProperty:'score',
+  similarityCutoff:0.45,
+  topK:5
+  })
+YIELD nodesCompared, relationshipsWritten
+
+//case 1
+MATCH (i1:Individual)-[:SAME_AS]-(i2:Individual)
+WHERE (i1)-[:SIMILAR]-(i2)
+RETURN i1, i2
+
+//case 2
+MATCH (h:Habitatge)-[:MATEIX_HAB]-(h2:Habitatge)
+WHERE (h)-[:SIMILAR]-(h2)
+RETURN count(*) as Coincidencies
